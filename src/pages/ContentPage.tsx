@@ -1,73 +1,80 @@
 import React, { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, Navigate } from 'react-router-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import rehypeRaw from 'rehype-raw';
+import matter from 'gray-matter';
 
-// Vite の import.meta.glob を使って docs ディレクトリ以下の .md ファイルを動的にインポート
-// query: '?raw' でファイル内容を文字列として取得し、import: 'default' でデフォルトエクスポートとして扱う
-// eager: true でモジュールを即時ロード
-const markdownModules = import.meta.glob('/docs/**/*.md', { query: '?raw', import: 'default', eager: true });
+// Vite の Glob Import 機能を使って Markdown ファイルのパスを取得
+// キーは `/src/content/path/to/file.md` の形式
+// 値は動的インポート関数 () => import('./path/to/file.md?raw')
+// ?raw をつけてファイル内容を文字列として取得
+const markdownModules = import.meta.glob('/src/content/**/*.md', { query: '?raw', import: 'default' });
 
 const ContentPage: React.FC = () => {
-  const { '*': slug } = useParams<{ '*': string }>(); // '*' はワイルドカードパスパラメータを受け取る
-  const [markdown, setMarkdown] = useState<string | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
+  const params = useParams();
+  const slug = params['*'] || ''; // /docs/aaa/bbb の '*' 部分を取得
+  const [markdownContent, setMarkdownContent] = useState<string | null>(null);
+  const [frontMatter, setFrontMatter] = useState<Record<string, any>>({});
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
     const loadMarkdown = async () => {
-      setLoading(true);
+      setIsLoading(true);
       setError(null);
-      setMarkdown(null); // 再読み込み時にクリア
+      // slug に対応する Markdown ファイルのパスを構築
+      // 例: slug='getting-started/installation' -> '/src/content/getting-started/installation.md'
+      const targetPath = `/src/content/${slug}.md`;
 
-      if (!slug) {
-        setError('Invalid document path.');
-        setLoading(false);
-        return;
-      }
+      // markdownModules から対応する動的インポート関数を取得
+      const importFn = markdownModules[targetPath];
 
-      // 対応する Markdown ファイルのパスを構築
-      // /docs/ は import.meta.glob のパスに含まれているので不要
-      // 先頭のスラッシュも不要な場合があるため除去
-      const filePath = `/docs/${slug}.md`;
-      console.log(`Attempting to load: ${filePath}`); // デバッグ用ログ
-
-      // import.meta.glob の結果から該当ファイルの内容を取得
-      const moduleContent = markdownModules[filePath];
-
-      // moduleContent が存在し、かつ string 型であることを確認
-      if (typeof moduleContent === 'string') {
-        console.log(`Found content for: ${filePath}`); // デバッグ用ログ
-        setMarkdown(moduleContent); // string 型であることが保証されている
+      if (importFn) {
+        try {
+          // 動的インポートを実行して Markdown 文字列を取得
+          const rawContent = await importFn() as string;
+          // gray-matter で Front Matter と本文をパース
+          const { data, content } = matter(rawContent);
+          setFrontMatter(data);
+          setMarkdownContent(content);
+        } catch (e) {
+          console.error('Failed to load markdown content:', e);
+          setError(e instanceof Error ? e : new Error('Unknown error loading content'));
+        }
       } else {
-        console.error(`Markdown file not found at path: ${filePath}`); // デバッグ用ログ
-        console.log('Available modules:', Object.keys(markdownModules)); // デバッグ用ログ
-        setError(`Document not found: ${slug}`);
+        // 対応するファイルが見つからない場合
+        setError(new Error(`Content not found for slug: ${slug}`));
       }
-      setLoading(false);
+      setIsLoading(false);
     };
 
     loadMarkdown();
   }, [slug]); // slug が変更されたら再実行
 
-  if (loading) {
-    return <div>Loading document...</div>;
+  if (isLoading) {
+    return <div>Loading...</div>; // ローディング表示
   }
 
   if (error) {
-    return <div className="text-red-600">Error: {error}</div>;
-  }
-
-  if (!markdown) {
-    // 通常は error ステートで処理されるはずだが念のため
-    return <div>Document content is empty or could not be loaded.</div>;
+    // エラー発生時、またはファイルが見つからない場合
+    // ここではシンプルに Not Found ページへリダイレクトする (App.tsx の設定に依存)
+    // より丁寧なエラー表示も可能
+    console.error(error.message);
+    return <Navigate to="/" replace />; // ホームへリダイレクト
   }
 
   return (
-    <article className="prose lg:prose-xl max-w-none"> {/* prose スタイルを適用 */}
-      <ReactMarkdown remarkPlugins={[remarkGfm]}>
-        {markdown}
-      </ReactMarkdown>
+    <article className="prose dark:prose-invert max-w-none"> {/* Tailwind Typography を適用 */}
+      {frontMatter.title && <h1>{frontMatter.title}</h1>} {/* Front Matter のタイトルを表示 */}
+      {markdownContent && (
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm]} // GFM (テーブルなど) を有効化
+          rehypePlugins={[rehypeRaw]} // HTML タグを有効化 (注意: サニタイズが必要な場合あり)
+        >
+          {markdownContent}
+        </ReactMarkdown>
+      )}
     </article>
   );
 };

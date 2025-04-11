@@ -3,8 +3,9 @@ import React from 'react';
 const HomePage: React.FC = () => {
   return (
     <div>
-      <h1 className="text-2xl font-bold mb-4">Home Page</h1>
-      <p>Welcome to the translated documentation site!</p>
+      <h1>ADK ドキュメントへようこそ</h1>
+      <p>サイドバーからドキュメントを選択してください。</p>
+      {/* 必要に応じてコンテンツを追加 */}
     </div>
   );
 };
