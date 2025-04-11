@@ -4,9 +4,9 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
 // Vite の import.meta.glob を使って docs ディレクトリ以下の .md ファイルを動的にインポート
-// as: 'raw' でファイル内容を文字列として取得
+// query: '?raw' でファイル内容を文字列として取得し、import: 'default' でデフォルトエクスポートとして扱う
 // eager: true でモジュールを即時ロード
-const markdownModules = import.meta.glob('/docs/**/*.md', { as: 'raw', eager: true });
+const markdownModules = import.meta.glob('/docs/**/*.md', { query: '?raw', import: 'default', eager: true });
 
 const ContentPage: React.FC = () => {
   const { '*': slug } = useParams<{ '*': string }>(); // '*' はワイルドカードパスパラメータを受け取る
@@ -35,9 +35,10 @@ const ContentPage: React.FC = () => {
       // import.meta.glob の結果から該当ファイルの内容を取得
       const moduleContent = markdownModules[filePath];
 
-      if (moduleContent !== undefined) {
+      // moduleContent が存在し、かつ string 型であることを確認
+      if (typeof moduleContent === 'string') {
         console.log(`Found content for: ${filePath}`); // デバッグ用ログ
-        setMarkdown(moduleContent);
+        setMarkdown(moduleContent); // string 型であることが保証されている
       } else {
         console.error(`Markdown file not found at path: ${filePath}`); // デバッグ用ログ
         console.log('Available modules:', Object.keys(markdownModules)); // デバッグ用ログ
