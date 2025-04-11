@@ -1,14 +1,12 @@
 import React from 'react';
 import { Outlet } from 'react-router-dom';
+import Sidebar from './Sidebar'; // Sidebar コンポーネントをインポート
 
 const MainLayout: React.FC = () => {
   return (
     <div className="flex h-screen">
-      {/* サイドバー (仮) */}
-      <aside className="w-64 bg-gray-100 p-4">
-        <h2 className="text-lg font-semibold mb-4">Sidebar</h2>
-        {/* ナビゲーションリンクなどをここに追加 */}
-      </aside>
+      {/* 実装した Sidebar コンポーネントを使用 */}
+      <Sidebar />
 
       {/* メインコンテンツエリア */}
       <div className="flex-1 flex flex-col">
