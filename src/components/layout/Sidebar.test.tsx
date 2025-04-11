@@ -1,42 +1,22 @@
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { MemoryRouter, useLocation as actualUseLocation } from 'react-router-dom'; // 元の useLocation を別名でインポート
+import { MemoryRouter, useLocation as actualUseLocation } from 'react-router-dom';
 import Sidebar from './Sidebar';
-import { type SidebarNavItem } from '../../types';
+// 実際の sidebarNav をインポート
+import { sidebarNav as actualSidebarNav } from '../../config/sidebar';
+import { type SidebarNavItem } from '../../types'; // 型定義もインポート
 
-// --- モックデータ ---
-const mockNavItems: SidebarNavItem[] = [
-  {
-    title: '入門ガイド',
-    items: [
-      { title: 'インストール', href: '/getting-started/installation' },
-      { title: '使い方', href: '/getting-started/usage' },
-    ],
-  },
-  {
-    title: 'API リファレンス',
-    items: [
-      { title: '概要', href: '/api/overview' },
-      { title: 'メソッド', href: '/api/methods' },
-    ],
-  },
-];
-
-// --- モジュールのモック (import の直後に配置) ---
-// react-router-dom の useLocation をモック
-vi.mock('react-router-dom', async (importOriginal) => {
-  const original = await importOriginal<typeof import('react-router-dom')>();
+// --- モジュールのモック ---
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
   return {
-    ...original,
-    useLocation: vi.fn(), // モック関数を作成
+    ...actual,
+    useLocation: vi.fn(),
   };
 });
 
-// config/sidebar の sidebarNav をモック
-vi.mock('../../config/sidebar', () => ({
-  sidebarNav: mockNavItems,
-}));
+// config/sidebar はモックせず、実際の値を使用する
 
 // --- テスト用ラッパーコンポーネント ---
 const TestWrapper = ({ children }: { children: React.ReactNode }) => (
@@ -44,72 +24,149 @@ const TestWrapper = ({ children }: { children: React.ReactNode }) => (
 );
 
 // --- テストスイート ---
-// describe.skip('Sidebar Component', () => { // スキップを解除
-describe.skip('Sidebar Component', () => { // .skip を追加して再度スキップ
-  // useLocation の型を明示的にモック関数として扱う
+describe('Sidebar Component', () => {
   const useLocationMock = actualUseLocation as ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
-    // 各テスト前に useLocation モックの戻り値を設定
     useLocationMock.mockReturnValue({
       pathname: '/',
-      search: '',
-      hash: '',
-      state: null,
-      key: 'default',
+      search: '', hash: '', state: null, key: 'default',
     });
-    // 他のモックのリセット (必要に応じて)
-    // vi.restoreAllMocks();
   });
 
-  it('should render navigation items correctly based on mocked config', () => {
-    render(
-      <TestWrapper>
-        <Sidebar />
-      </TestWrapper>
-    );
-    expect(screen.getByRole('button', { name: '入門ガイド' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'API リファレンス' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'インストール' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: '使い方' })).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: '概要' })).not.toBeInTheDocument();
+  it('should render section titles from config', () => {
+    render(<TestWrapper><Sidebar /></TestWrapper>);
+    actualSidebarNav.forEach(section => {
+      // section.title が存在することを確認してからテスト
+      if (section?.title) {
+        expect(screen.getByRole('button', { name: section.title })).toBeInTheDocument();
+      } else {
+        // title がないデータはテストしないか、エラーにする (今回は何もしない)
+      }
+    });
   });
+
+  it('should open the default section based on initial path', () => {
+    render(<TestWrapper><Sidebar /></TestWrapper>);
+    // actualSidebarNav が空でないことを確認
+    if (actualSidebarNav.length > 0) {
+      const firstSection = actualSidebarNav[0];
+      // firstSection と items が存在することを確認
+      if (firstSection?.items && firstSection.items.length > 0) {
+        firstSection.items.forEach(item => {
+          // item.title が存在することを確認
+          if (item?.title) {
+            expect(screen.getByRole('link', { name: item.title })).toBeInTheDocument();
+          }
+        });
+      }
+      // 他のセクションが閉じていることを確認
+      if (actualSidebarNav.length > 1) {
+        const secondSection = actualSidebarNav[1];
+        // secondSection と items が存在することを確認
+        if (secondSection?.items && secondSection.items.length > 0) {
+          const firstItemTitle = secondSection.items[0]?.title;
+          if (firstItemTitle) {
+            expect(screen.queryByRole('link', { name: firstItemTitle })).not.toBeInTheDocument();
+          }
+        }
+      }
+    }
+  });
+
+   it('should open the corresponding section if the initial path matches a child link', () => {
+     // actualSidebarNav[1] とその items[0] が存在するかチェック
+     if (actualSidebarNav.length > 1 && actualSidebarNav[1]?.items && actualSidebarNav[1].items.length > 0 && actualSidebarNav[1].items[0]?.href) {
+       const targetItem = actualSidebarNav[1].items[0];
+       const targetPath = `/docs${targetItem.href}`;
+       useLocationMock.mockReturnValue({
+         pathname: targetPath,
+         search: '', hash: '', state: null, key: 'test',
+       });
+       render(<TestWrapper><Sidebar /></TestWrapper>);
+
+       // 2番目のセクションが開いていることを確認
+       const secondSection = actualSidebarNav[1];
+       secondSection.items?.forEach(item => { // items が undefined でないことを確認
+         if (item?.title) {
+           expect(screen.getByRole('link', { name: item.title })).toBeInTheDocument();
+         }
+       });
+
+       // 最初のセクションが閉じていることを確認
+       const firstSection = actualSidebarNav[0];
+       if (firstSection?.items && firstSection.items.length > 0) {
+         const firstItemTitle = firstSection.items[0]?.title;
+         if (firstItemTitle) {
+           expect(screen.queryByRole('link', { name: firstItemTitle })).not.toBeInTheDocument();
+         }
+       }
+     } else {
+       // テストの前提条件が満たされない場合はスキップまたは失敗させる
+       it.skip('Skipping test because sidebarNav structure is not as expected', () => {});
+     }
+   });
 
   it('should expand/collapse accordion when section title is clicked', async () => {
+    // テストの前提条件を確認
+    if (actualSidebarNav.length < 2 || !actualSidebarNav[0]?.items?.[0]?.title || !actualSidebarNav[1]?.items?.[0]?.title) {
+       it.skip('Skipping test because sidebarNav structure is not as expected', () => {});
+       return;
+    }
+
     const user = userEvent.setup();
-    render(
-      <TestWrapper>
-        <Sidebar />
-      </TestWrapper>
-    );
-    const apiReferenceButton = screen.getByRole('button', { name: 'API リファレンス' });
+    render(<TestWrapper><Sidebar /></TestWrapper>);
 
-    expect(screen.queryByRole('link', { name: '概要' })).not.toBeInTheDocument();
-    await user.click(apiReferenceButton);
-    expect(await screen.findByRole('link', { name: '概要' })).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'メソッド' })).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: 'インストール' })).not.toBeInTheDocument();
+    const firstSectionTitle = actualSidebarNav[0].title;
+    const secondSectionTitle = actualSidebarNav[1].title;
+    const firstSectionFirstItem = actualSidebarNav[0].items[0].title;
+    const secondSectionFirstItem = actualSidebarNav[1].items[0].title;
 
-    await user.click(apiReferenceButton); // 再度クリックして閉じる
-    expect(screen.queryByRole('link', { name: '概要' })).not.toBeInTheDocument();
+    const firstSectionButton = screen.getByRole('button', { name: firstSectionTitle });
+    const secondSectionButton = screen.getByRole('button', { name: secondSectionTitle });
+
+    // 初期状態
+    expect(screen.getByRole('link', { name: firstSectionFirstItem })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: secondSectionFirstItem })).not.toBeInTheDocument();
+
+    // 2番目をクリック
+    await user.click(secondSectionButton);
+    expect(await screen.findByRole('link', { name: secondSectionFirstItem })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: firstSectionFirstItem })).not.toBeInTheDocument();
+
+    // 1番目をクリック
+    await user.click(firstSectionButton);
+    expect(await screen.findByRole('link', { name: firstSectionFirstItem })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: secondSectionFirstItem })).not.toBeInTheDocument();
+
+     // 再度1番目をクリック
+     await user.click(firstSectionButton);
+     expect(screen.queryByRole('link', { name: firstSectionFirstItem })).not.toBeInTheDocument();
   });
 
   it('should highlight the active link based on current pathname', () => {
-    const activePath = '/docs/getting-started/installation';
-    // useLocation モックの戻り値を更新
+     // テストの前提条件を確認
+    if (!actualSidebarNav[0]?.items?.[0]?.href) {
+       it.skip('Skipping test because sidebarNav structure is not as expected', () => {});
+       return;
+    }
+    const targetItem = actualSidebarNav[0].items[0];
+    const activePath = `/docs${targetItem.href}`;
     useLocationMock.mockReturnValue({
       pathname: activePath,
       search: '', hash: '', state: null, key: 'test',
     });
 
-    render(
-      <TestWrapper>
-        <Sidebar />
-      </TestWrapper>
-    );
-    const installationLink = screen.getByRole('link', { name: 'インストール' });
-    expect(installationLink).toHaveClass('bg-muted text-primary');
-    const usageLink = screen.getByRole('link', { name: '使い方' });
-    expect(usageLink).not.toHaveClass('bg-muted text-primary');
+    render(<TestWrapper><Sidebar /></TestWrapper>);
+
+    const activeLink = screen.getByRole('link', { name: targetItem.title });
+    expect(activeLink).toHaveClass('bg-muted text-primary');
+
+    // 他のリンクがアクティブでないことを確認
+    if (actualSidebarNav[0].items.length > 1 && actualSidebarNav[0].items[1]?.title) {
+      const inactiveItem = actualSidebarNav[0].items[1];
+      const inactiveLink = screen.getByRole('link', { name: inactiveItem.title });
+      expect(inactiveLink).not.toHaveClass('bg-muted text-primary');
+    }
   });
 });
