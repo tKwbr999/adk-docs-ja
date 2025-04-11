@@ -1,35 +1,28 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import MainLayout from './components/layout/MainLayout';
+import HomePage from './pages/HomePage';
+import ContentPage from './pages/ContentPage';
+import './App.css'; // 必要に応じてグローバル CSS をインポート
 
 function App() {
-  const [count, setCount] = useState(0)
+  // GitHub Pages のサブディレクトリに対応するためのベースパス取得
+  // vite.config.ts で設定した base を利用する想定だが、
+  // BrowserRouter では basename プロパティで設定する
+  // process.env.BASE_URL は Vite 固有の環境変数
+  const basename = import.meta.env.BASE_URL;
 
   return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.tsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
-  )
+    <BrowserRouter basename={basename}>
+      <Routes>
+        <Route path="/" element={<MainLayout />}>
+          <Route index element={<HomePage />} /> {/* ルートパス */}
+          <Route path="docs/:slug" element={<ContentPage />} /> {/* コンテンツページ */}
+          {/* 他のルートもここに追加可能 */}
+          <Route path="*" element={<div>404 Not Found</div>} /> {/* 404 ページ */}
+        </Route>
+      </Routes>
+    </BrowserRouter>
+  );
 }
 
-export default App
+export default App;
